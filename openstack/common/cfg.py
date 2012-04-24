@@ -772,7 +772,41 @@ class MultiConfigParser(object):
         return self.sections[section][name]
 
 
-class ConfigOpts(collections.Mapping):
+class ConfigCache(object):
+
+    def __init__(self, conf):
+        self._conf = conf
+        self._cache = {}
+
+    @staticmethod
+    def clear_wrap(f):
+        @functools.wraps(f)
+        def __inner(conf, *args, **kwargs):
+            if kwargs.pop('clear_cache', True):
+                conf._cache.clear()
+            return f(conf, *args, **kwargs)
+
+        return __inner
+
+    def clear(self):
+        self._cache.clear()
+
+    def get(self, key):
+        return self._cache[key]
+
+    def add(self, key, value):
+        return self._cache.setdefault(key, value)
+
+    def lookup(self, name, group=None):
+        key = (self._conf._get_group(group) if group else None, name)
+        try:
+            return self.get(key)
+        except KeyError:
+            value = self._conf._substitute(self._conf._get(name, group))
+            return self.add(key, value)
+
+
+class ConfigOpts(collections.Mapping, ConfigCache):
 
     """
     Config options which may be set on the command line or in config files.
@@ -822,7 +856,7 @@ class ConfigOpts(collections.Mapping):
                                               usage=self.usage)
         self._cparser = None
 
-        self.__cache = {}
+        self._cache = ConfigCache(self)
 
         self.register_cli_opt(
             MultiStrOpt('config-file',
@@ -834,13 +868,7 @@ class ConfigOpts(collections.Mapping):
                              'are: %s' % (self.default_config_files, )))
 
     def __clear_cache(f):
-        @functools.wraps(f)
-        def __inner(self, *args, **kwargs):
-            if kwargs.pop('clear_cache', True):
-                self.__cache.clear()
-            return f(self, *args, **kwargs)
-
-        return __inner
+        return ConfigCache.clear_wrap(f)
 
     def __call__(self, args=None):
         """Parse command line arguments and config files.
@@ -876,7 +904,7 @@ class ConfigOpts(collections.Mapping):
         :returns: the option value (after string subsititution) or a GroupAttr
         :raises: NoSuchOptError,ConfigFileValueError,TemplateSubstitutionError
         """
-        return self._get(name)
+        return self._cache.lookup(name)
 
     def __getitem__(self, key):
         """Look up an option value and perform string substitution."""
@@ -1075,15 +1103,6 @@ class ConfigOpts(collections.Mapping):
         self._oparser.print_help(file)
 
     def _get(self, name, group=None):
-        key = (self._get_group(group) if group else None, name)
-        try:
-            return self.__cache[key]
-        except KeyError:
-            value = self._substitute(self._do_get(name, group))
-            self.__cache[key] = value
-            return value
-
-    def _do_get(self, name, group=None):
         """Look up an option value.
 
         :param name: the opt name (or 'dest', more precisely)
@@ -1224,7 +1243,7 @@ class ConfigOpts(collections.Mapping):
 
         def __getattr__(self, name):
             """Look up an option value and perform template substitution."""
-            return self.conf._get(name, self.group)
+            return self.conf._cache.lookup(name, self.group)
 
         def __getitem__(self, key):
             """Look up an option value and perform string substitution."""
