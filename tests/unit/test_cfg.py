@@ -24,6 +24,7 @@ import unittest
 import stubout
 
 from openstack.common.cfg import *
+from tests import utils as testutils
 
 
 class ExceptionsTestCase(unittest.TestCase):
@@ -1109,6 +1110,29 @@ class UnregisterOptTestCase(BaseTestCase):
         self.conf.unregister_opt(opt, group='blaa')
 
         self.assertFalse(hasattr(self.conf.blaa, 'foo'))
+
+
+class ImportOptTestCase(BaseTestCase):
+
+    def setUp(self):
+        BaseTestCase.setUp(self)
+        self.importer = testutils.FakeImporter()
+
+    def test_import_opt(self):
+        self.importer.fake_module('blaamod',
+                                  "import openstack.common.cfg\n"
+                                  "cfg = openstack.common.cfg\n"
+                                  "cfg.CONF.register_opt(cfg.StrOpt('blaa'))")
+
+        self.assertFalse(hasattr(CONF, 'blaa'))
+
+        self.importer.setup()
+        try:
+            import blaamod
+        finally:
+            self.importer.teardown()
+
+        self.assertTrue(hasattr(CONF, 'blaa'))
 
 
 class RequiredOptsTestCase(BaseTestCase):
