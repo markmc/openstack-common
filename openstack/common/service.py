@@ -32,13 +32,21 @@ import greenlet
 from openstack.common import cfg
 from openstack.common import importutils
 from openstack.common import log as logging
+from openstack.common import loopingcall
 from openstack.common import manager as mgr
 from openstack.common.gettextutils import _
 
 
 LOG = logging.getLogger(__name__)
 
+service_opts = [
+    cfg.IntOpt('report_interval',
+               default=10,
+               help='seconds between nodes reporting state to datastore'),
+    ]
+
 CONF = cfg.CONF
+CONF.register_opts(service_opts)
 
 
 class Launcher(object):
@@ -278,32 +286,46 @@ class ProcessLauncher(object):
 class Service(object):
     """Service object for binaries running on hosts.
 
-    A service takes a manager."""
+    A service takes a manager. It also reports it state to the database services
+    table."""
 
-    def __init__(self, host, manager, *args, **kwargs):
+    def __init__(self, host, manager, report_interval=None, *args, **kwargs):
         self.host = host
         assert(isinstance(manager, mgr.Manager))
         self.manager = manager
+        self.report_interval = report_interval
         self.timers = []
 
     def start(self):
         self.manager.init_host()
 
+        if self.report_interval:
+            pulse = loopingcall.LoopingCall(self.report_state)
+            pulse.start(interval=self.report_interval,
+                        initial_delay=self.report_interval)
+            self.timers.append(pulse)
+
     @classmethod
-    def create(cls, host=None, manager=None, *args, **kwargs):
+    def create(cls, host=None, manager=None, report_interval=None,
+               *args, **kwargs):
         """Instantiates class and passes back application object.
 
         :param host: defaults to cfg.CONF.host
         :param manager: name of manager class
+        :param report_interval: defaults to cfg.CONF.report_interval
 
         """
         if not host:
             host = CONF.host
+        if report_interval is None:
+            report_interval = CONF.report_interval
 
         manager_class = importutils.import_class(manager)
         manager_instance = manager_class(host=host, *args, **kwargs)
 
-        service_obj = cls(host, manager_instance, *args, **kwargs)
+        service_obj = cls(host, manager_instance,
+                          report_interval=report_interval,
+                          *args, **kwargs)
 
         return service_obj
 
@@ -321,6 +343,9 @@ class Service(object):
                 x.wait()
             except Exception:
                 pass
+
+    def report_state(self):
+        pass
 
 
 # NOTE(vish): the global launcher is to maintain the existing
