@@ -284,6 +284,7 @@ class Service(object):
         self.host = host
         assert(isinstance(manager, mgr.Manager))
         self.manager = manager
+        self.timers = []
 
     def start(self):
         self.manager.init_host()
@@ -307,10 +308,19 @@ class Service(object):
         return service_obj
 
     def stop(self):
-        pass
+        for x in self.timers:
+            try:
+                x.stop()
+            except Exception:
+                pass
+        self.timers = []
 
     def wait(self):
-        pass
+        for x in self.timers:
+            try:
+                x.wait()
+            except Exception:
+                pass
 
 
 # NOTE(vish): the global launcher is to maintain the existing
