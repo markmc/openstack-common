@@ -171,3 +171,9 @@ class Manager(object):
 
         """
         pass
+
+    def service_config(self, context):
+        config = {}
+        for key in cfg.CONF:
+            config[key] = cfg.CONF.get(key, None)
+        return config
