@@ -129,6 +129,17 @@ class ServiceLauncher(Launcher):
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
 
+        LOG.debug(_('Full set of CONF:'))
+        for flag in CONF:
+            flag_get = CONF.get(flag, None)
+            # hide flag contents from log if contains a password
+            # should use secret flag when switch over to openstack-common
+            if ("_password" in flag or "_key" in flag or
+                    (flag == "sql_connection" and "mysql:" in flag_get)):
+                LOG.debug(_('%(flag)s : FLAG SET ') % locals())
+            else:
+                LOG.debug('%(flag)s : %(flag_get)s' % locals())
+
         status = None
         try:
             super(ServiceLauncher, self).wait()
