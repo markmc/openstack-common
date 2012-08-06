@@ -370,6 +370,10 @@ class Service(object):
                            initial_delay=initial_delay)
             self.timers.append(periodic)
 
+    def __getattr__(self, key):
+        manager = self.__dict__.get('manager', None)
+        return getattr(manager, key)
+
     @classmethod
     def create(cls, host=None, binary=None, topic=None, manager=None,
                report_interval=None, periodic_interval=None,
