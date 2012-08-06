@@ -325,6 +325,7 @@ class Service(object):
         self.report_interval = report_interval
         self.periodic_interval = periodic_interval
         self.periodic_fuzzy_delay = periodic_fuzzy_delay
+        self.saved_args, self.saved_kwargs = args, kwargs
         self.timers = []
 
     def get_admin_context(self):
