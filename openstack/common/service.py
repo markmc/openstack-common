@@ -20,6 +20,7 @@
 """Generic Node base class for all workers that run on hosts."""
 
 import errno
+import inspect
 import os
 import random
 import signal
@@ -313,10 +314,11 @@ class Service(object):
     on topic. It also periodically runs tasks on the manager and reports
     it state to the database services table."""
 
-    def __init__(self, host, topic, manager, report_interval=None,
+    def __init__(self, host, binary, topic, manager, report_interval=None,
                  periodic_interval=None, periodic_fuzzy_delay=None,
                  *args, **kwargs):
         self.host = host
+        self.binary = binary
         self.topic = topic
         assert(isinstance(manager, mgr.Manager))
         self.manager = manager
@@ -369,12 +371,13 @@ class Service(object):
             self.timers.append(periodic)
 
     @classmethod
-    def create(cls, host=None, topic=None, manager=None,
+    def create(cls, host=None, binary=None, topic=None, manager=None,
                report_interval=None, periodic_interval=None,
                periodic_fuzzy_delay=None, *args, **kwargs):
         """Instantiates class and passes back application object.
 
         :param host: defaults to cfg.CONF.host
+        :param binary: defaults to basename of executable
         :param topic: defaults to bin_name - 'nova-' part
         :param manager: defaults to cfg.CONF.<topic>_manager
         :param report_interval: defaults to cfg.CONF.report_interval
@@ -384,6 +387,10 @@ class Service(object):
         """
         if not host:
             host = CONF.host
+        if not binary:
+            binary = os.path.basename(inspect.stack()[-1][1])
+        if not topic:
+            topic = binary.rpartition('nova-')[2]
         if not manager:
             manager = CONF.get('%s_manager' % topic, None)
         if report_interval is None:
@@ -396,7 +403,7 @@ class Service(object):
         manager_class = importutils.import_class(manager)
         manager_instance = manager_class(host=host, *args, **kwargs)
 
-        service_obj = cls(host, topic, manager_instance,
+        service_obj = cls(host, binary, topic, manager_instance,
                           report_interval=report_interval,
                           periodic_interval=periodic_interval,
                           periodic_fuzzy_delay=periodic_fuzzy_delay,
