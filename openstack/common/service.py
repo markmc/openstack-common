@@ -34,6 +34,7 @@ from openstack.common import importutils
 from openstack.common import log as logging
 from openstack.common import loopingcall
 from openstack.common import manager as mgr
+from openstack.common import rpc
 from openstack.common.gettextutils import _
 
 
@@ -132,6 +133,7 @@ class ServiceLauncher(Launcher):
         except SystemExit as exc:
             status = exc.code
             self.stop()
+        rpc.cleanup()
 
         if status is not None:
             sys.exit(status)
@@ -298,10 +300,11 @@ class Service(object):
     on topic. It also periodically runs tasks on the manager and reports
     it state to the database services table."""
 
-    def __init__(self, host, manager, report_interval=None,
+    def __init__(self, host, topic, manager, report_interval=None,
                  periodic_interval=None, periodic_fuzzy_delay=None,
                  *args, **kwargs):
         self.host = host
+        self.topic = topic
         assert(isinstance(manager, mgr.Manager))
         self.manager = manager
         self.report_interval = report_interval
@@ -317,6 +320,23 @@ class Service(object):
 
     def start(self):
         self.manager.init_host()
+
+        self.conn = rpc.create_connection(new=True)
+        LOG.debug(_("Creating Consumer connection for Service %s") %
+                  self.topic)
+
+        rpc_dispatcher = self.manager.create_rpc_dispatcher()
+
+        # Share this same connection for these Consumers
+        self.conn.create_consumer(self.topic, rpc_dispatcher, fanout=False)
+
+        node_topic = '%s.%s' % (self.topic, self.host)
+        self.conn.create_consumer(node_topic, rpc_dispatcher, fanout=False)
+
+        self.conn.create_consumer(self.topic, rpc_dispatcher, fanout=True)
+
+        # Consume from all consumers in a thread
+        self.conn.consume_in_thread()
 
         if self.report_interval:
             pulse = loopingcall.LoopingCall(self.report_state)
@@ -336,13 +356,14 @@ class Service(object):
             self.timers.append(periodic)
 
     @classmethod
-    def create(cls, host=None, manager=None,
+    def create(cls, host=None, topic=None, manager=None,
                report_interval=None, periodic_interval=None,
                periodic_fuzzy_delay=None, *args, **kwargs):
         """Instantiates class and passes back application object.
 
         :param host: defaults to cfg.CONF.host
-        :param manager: name of manager class
+        :param topic: defaults to bin_name - 'nova-' part
+        :param manager: defaults to cfg.CONF.<topic>_manager
         :param report_interval: defaults to cfg.CONF.report_interval
         :param periodic_interval: defaults to cfg.CONF.periodic_interval
         :param periodic_fuzzy_delay: defaults to cfg.CONF.periodic_fuzzy_delay
@@ -350,6 +371,8 @@ class Service(object):
         """
         if not host:
             host = CONF.host
+        if not manager:
+            manager = CONF.get('%s_manager' % topic, None)
         if report_interval is None:
             report_interval = CONF.report_interval
         if periodic_interval is None:
@@ -360,7 +383,7 @@ class Service(object):
         manager_class = importutils.import_class(manager)
         manager_instance = manager_class(host=host, *args, **kwargs)
 
-        service_obj = cls(host, manager_instance,
+        service_obj = cls(host, topic, manager_instance,
                           report_interval=report_interval,
                           periodic_interval=periodic_interval,
                           periodic_fuzzy_delay=periodic_fuzzy_delay,
@@ -369,6 +392,12 @@ class Service(object):
         return service_obj
 
     def stop(self):
+        # Try to shut the connection down, but if we get any sort of
+        # errors, go ahead and ignore them.. as we're shutting down anyway
+        try:
+            self.conn.close()
+        except Exception:
+            pass
         for x in self.timers:
             try:
                 x.stop()

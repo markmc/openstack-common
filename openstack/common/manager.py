@@ -32,7 +32,9 @@ We have adopted a basic strategy of Smart managers and dumb data, which means
 rather than attaching methods to data objects, components should call manager
 methods that act on the data.
 
-Methods on managers that can be executed locally should be called directly.
+Methods on managers that can be executed locally should be called directly. If
+a particular method must execute on a remote host, this should be done via rpc
+to the service that wraps the manager
 
 Managers should be responsible for most of the db access, and
 non-implementation specific data.  Anything implementation specific that can't
@@ -53,6 +55,7 @@ This module provides Manager, a base class for managers.
 
 from openstack.common import cfg
 from openstack.common import log as logging
+from openstack.common.rpc import dispatcher as rpc_dispatcher
 
 
 LOG = logging.getLogger(__name__)
@@ -122,10 +125,21 @@ class ManagerMeta(type):
 class Manager(object):
     __metaclass__ = ManagerMeta
 
+    # Set RPC API version to 1.0 by default.
+    RPC_API_VERSION = '1.0'
+
     def __init__(self, host=None):
         if not host:
             host = cfg.CONF.host
         self.host = host
+
+    def create_rpc_dispatcher(self):
+        '''Get the rpc dispatcher for this manager.
+
+        If a manager would like to set an rpc API version, or support more than
+        one class as the target of rpc messages, override this method.
+        '''
+        return rpc_dispatcher.RpcDispatcher([self])
 
     def periodic_tasks(self, context, raise_on_error=False):
         """Tasks to be run at a periodic interval."""
