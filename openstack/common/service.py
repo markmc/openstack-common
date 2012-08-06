@@ -43,6 +43,14 @@ service_opts = [
     cfg.IntOpt('report_interval',
                default=10,
                help='seconds between nodes reporting state to datastore'),
+    cfg.IntOpt('periodic_interval',
+               default=60,
+               help='seconds between running periodic tasks'),
+    cfg.IntOpt('periodic_fuzzy_delay',
+               default=60,
+               help='range of seconds to randomly delay when starting the'
+                    ' periodic task scheduler to reduce stampeding.'
+                    ' (Disable by setting to 0)'),
     ]
 
 CONF = cfg.CONF
@@ -286,15 +294,26 @@ class ProcessLauncher(object):
 class Service(object):
     """Service object for binaries running on hosts.
 
-    A service takes a manager. It also reports it state to the database services
-    table."""
+    A service takes a manager and enables rpc by listening to queues based
+    on topic. It also periodically runs tasks on the manager and reports
+    it state to the database services table."""
 
-    def __init__(self, host, manager, report_interval=None, *args, **kwargs):
+    def __init__(self, host, manager, report_interval=None,
+                 periodic_interval=None, periodic_fuzzy_delay=None,
+                 *args, **kwargs):
         self.host = host
         assert(isinstance(manager, mgr.Manager))
         self.manager = manager
         self.report_interval = report_interval
+        self.periodic_interval = periodic_interval
+        self.periodic_fuzzy_delay = periodic_fuzzy_delay
         self.timers = []
+
+    def get_admin_context(self):
+        """
+        Classes inheriting from this class need to implement this.
+        """
+        pass
 
     def start(self):
         self.manager.init_host()
@@ -305,26 +324,46 @@ class Service(object):
                         initial_delay=self.report_interval)
             self.timers.append(pulse)
 
+        if self.periodic_interval:
+            if self.periodic_fuzzy_delay:
+                initial_delay = random.randint(0, self.periodic_fuzzy_delay)
+            else:
+                initial_delay = None
+
+            periodic = loopingcall.LoopingCall(self.periodic_tasks)
+            periodic.start(interval=self.periodic_interval,
+                           initial_delay=initial_delay)
+            self.timers.append(periodic)
+
     @classmethod
-    def create(cls, host=None, manager=None, report_interval=None,
-               *args, **kwargs):
+    def create(cls, host=None, manager=None,
+               report_interval=None, periodic_interval=None,
+               periodic_fuzzy_delay=None, *args, **kwargs):
         """Instantiates class and passes back application object.
 
         :param host: defaults to cfg.CONF.host
         :param manager: name of manager class
         :param report_interval: defaults to cfg.CONF.report_interval
+        :param periodic_interval: defaults to cfg.CONF.periodic_interval
+        :param periodic_fuzzy_delay: defaults to cfg.CONF.periodic_fuzzy_delay
 
         """
         if not host:
             host = CONF.host
         if report_interval is None:
             report_interval = CONF.report_interval
+        if periodic_interval is None:
+            periodic_interval = CONF.periodic_interval
+        if periodic_fuzzy_delay is None:
+            periodic_fuzzy_delay = CONF.periodic_fuzzy_delay
 
         manager_class = importutils.import_class(manager)
         manager_instance = manager_class(host=host, *args, **kwargs)
 
         service_obj = cls(host, manager_instance,
                           report_interval=report_interval,
+                          periodic_interval=periodic_interval,
+                          periodic_fuzzy_delay=periodic_fuzzy_delay,
                           *args, **kwargs)
 
         return service_obj
@@ -343,6 +382,11 @@ class Service(object):
                 x.wait()
             except Exception:
                 pass
+
+    def periodic_tasks(self, raise_on_error=False):
+        """Tasks to be run at a periodic interval."""
+        ctxt = self.get_admin_context()
+        self.manager.periodic_tasks(ctxt, raise_on_error=raise_on_error)
 
     def report_state(self):
         pass
