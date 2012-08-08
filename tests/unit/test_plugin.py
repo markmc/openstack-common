@@ -48,7 +48,7 @@ class NotifyTestCase(test_utils.BaseTestCase):
 
     def tearDown(self):
         super(NotifyTestCase, self).tearDown()
-        notifier_api._reset_drivers()
+        notifier_api.clear_drivers()
 
     def test_add_notifier(self):
         notifier1 = SimpleNotifier()
@@ -113,6 +113,7 @@ class APITestCase(test_utils.BaseTestCase):
     """Test case for the plugin api extension interface"""
     def tearDown(self):
         super(APITestCase, self).tearDown()
+        notifier_api.clear_drivers()
 
     def test_add_extension(self):
         def mock_load(_s):

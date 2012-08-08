@@ -49,6 +49,10 @@ class TestCBP(callbackplugin.CallbackPlugin):
 class CallbackTestCase(test_utils.BaseTestCase):
     """Tests for the callback plugin convenience class"""
 
+    def tearDown(self):
+        super(CallbackTestCase, self).tearDown()
+        notifier_api.clear_drivers()
+
     def test_callback_plugin_subclass(self):
 
         class MockEntrypoint(pkg_resources.EntryPoint):

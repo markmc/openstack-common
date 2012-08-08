@@ -144,29 +144,28 @@ def notify(context, publisher_id, event_type, priority, payload):
                             locals())
 
 
-_runtime_drivers = {}
-_cached_cfg_drivers = {}
+_drivers = None
+_extra_drivers = []
 
 
 def _get_drivers():
     """Return the complete set of runtime and config-time drivers.
 
-    _runtime_drivers tracks the set of drivers modified by add_driver().
+    _extra_drivers tracks the set of drivers added by add_driver().
 
-    _cached_cfg_drivers() caches the loaded cfg drivers as a timesaver.
+    _drivers is a cache of all loaded drivers as a timesaver. The cache
+    can be cleared using _reset_driver_cache().
 
-    We need to recheck the config on each run because tests frequently
-    override cfg at runtime.
+    We need to keep the set of runtime and config-time drivers separate
+    so we can clear the cache without losing runtime added drivers.
     """
+    global _drivers
+    if _drivers:
+        return _drivers
 
-    _drivers = _runtime_drivers.values()
-    for notification_driver in CONF.notification_driver:
-        try:
-            driver = _cached_cfg_drivers[notification_driver]
-        except KeyError:
-            driver = _load_driver(notification_driver)
-            _cached_cfg_drivers[notification_driver] = driver
-
+    _drivers = []
+    for notification_driver in CONF.notification_driver + _extra_drivers:
+        driver = _load_driver(notification_driver)
         if driver:
             _drivers.append(driver)
 
@@ -174,34 +173,35 @@ def _get_drivers():
 
 
 def _load_driver(notification_driver):
-    if isinstance(notification_driver, basestring):
-        # Load
-        try:
-            driver = importutils.import_module(notification_driver)
-            return driver
-        except ImportError as e:
-            LOG.exception(_("Failed to load notifier %s. "
-                            "These notifications will not be sent.") %
-                            notification_driver)
-            return None
-    else:
+    if not isinstance(notification_driver, basestring):
         # Driver is already loaded; just return what we've got.
         return notification_driver
+
+    try:
+        return importutils.import_module(notification_driver)
+    except ImportError as e:
+        LOG.exception(_("Failed to load notifier %s. "
+                        "These notifications will not be sent.") %
+                      notification_driver)
 
 
 def add_driver(notification_driver):
     """Add a notification driver at runtime.
 
-    We're using a dict and keeping track of the name in
-    case we need it later to remove or compare.
+    This adds a notification driver to the list set of drivers defined
+    by the CONF.notification_driver configuration option.
     """
-    driver = _load_driver(notification_driver)
-    if driver:
-        _runtime_drivers[notification_driver] = driver
+    _extra_drivers.append(notification_driver)
 
 
-def _reset_drivers():
-    """Used by unit tests to reset the drivers."""
-    global _runtime_drivers
-    _runtime_drivers = {}
-    _cached_cfg_drivers = {}
+def clear_drivers():
+    """Remove any notification drivers added by add_driver()."""
+    global _extra_drivers
+    _extra_drivers = []
+    _reset_driver_cache()
+
+
+def _reset_driver_cache():
+    """Used by unit tests to reset the drivers cache."""
+    global _drivers
+    _drivers = None
