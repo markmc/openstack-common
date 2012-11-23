@@ -1343,6 +1343,11 @@ class SadPathTestCase(BaseTestCase):
         self.assertTrue(hasattr(self.conf, 'foo'))
         self.assertEquals(self.conf.foo, None)
 
+    def test_error_duplicate(self):
+        self.conf.register_cli_opt(StrOpt('foo', help='bar'))
+        self.assertRaises(DuplicateOptError,
+                          self.conf.register_cli_opt, StrOpt('foo'))
+
     def test_error_duplicate_with_different_dest(self):
         self.conf.register_cli_opt(StrOpt('foo', dest='f'))
         self.conf.register_cli_opt(StrOpt('foo'))
@@ -1365,6 +1370,8 @@ class SadPathTestCase(BaseTestCase):
                           self.conf.register_cli_opt, StrOpt('foo'))
 
     def test_bad_cli_arg(self):
+        self.conf.register_opt(BoolOpt('foo'))
+
         self.stubs.Set(sys, 'stderr', StringIO.StringIO())
 
         self.assertRaises(SystemExit, self.conf, ['--foo'])
@@ -1539,6 +1546,15 @@ class CommonOptsTestCase(BaseTestCase):
     def setUp(self):
         super(CommonOptsTestCase, self).setUp()
         self.conf = CommonConfigOpts()
+
+    def test_print_help(self):
+        f = StringIO.StringIO()
+        self.conf([])
+        self.conf.print_help(file=f)
+        self.assertTrue('debug' in f.getvalue())
+        self.assertTrue('verbose' in f.getvalue())
+        self.assertTrue('log-config' in f.getvalue())
+        self.assertTrue('log-format' in f.getvalue())
 
     def test_debug_verbose(self):
         self.conf(['--debug', '--verbose'])
