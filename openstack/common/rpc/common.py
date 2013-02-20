@@ -505,32 +505,27 @@ def deserialize_msg(msg):
     #    This case covers return values from rpc.call() from before message
     #    envelopes were used.  (messages to call a method were always a dict)
 
-    has_envelope = True
-    base_envelope_keys = (_VERSION_KEY, _MESSAGE_KEY)
     if not isinstance(msg, dict):
         # See #2 above.
         return msg
-    elif not all(map(lambda key: key in msg, base_envelope_keys)):
-        # See #1.b above.
-        has_envelope = False
-    elif not version_is_compatible(_RPC_ENVELOPE_VERSION, msg[_VERSION_KEY]):
-        raise UnsupportedRpcEnvelopeVersion(version=msg[_VERSION_KEY])
-    nonce = None
-    raw_msg = None
 
-    if has_envelope and '_NONCE_KEY' in msg:  # envelope v2.1
+    base_envelope_keys = (_VERSION_KEY, _MESSAGE_KEY)
+    if not all(map(lambda key: key in msg, base_envelope_keys)):
+        #  See #1.b above.
+        nonce = msg.get('_nonce')
+        _raise_if_duplicate(nonce)
+        return msg
+
+    # At this point we think we have the message envelope
+    # format we were expecting. (#1.a above)
+
+    if not version_is_compatible(_RPC_ENVELOPE_VERSION, msg[_VERSION_KEY]):
+        raise UnsupportedRpcEnvelopeVersion(version=msg[_VERSION_KEY])
+
+    # FIXME(markmc): needs to be >= 2.1
+    if msg[_VERSION_KEY]) == '2.1':
         _raise_if_duplicate(msg[_NONCE_KEY])
 
-        # Here, we can delay jsonutils.loads until
-        # after we have verified the message.
-        raw_msg = jsonutils.loads(msg[_MESSAGE_KEY])
-    elif has_envelope:  # envelope v2.0
-        raw_msg = jsonutils.loads(msg[_MESSAGE_KEY])
-        nonce = raw_msg.get('_nonce')
-        _raise_if_duplicate(nonce)
-    else:  # no envelope ("v1.0")
-        raw_msg = msg
-        nonce = raw_msg.get('_nonce')
-        _raise_if_duplicate(nonce)
+    raw_msg = jsonutils.loads(msg[_MESSAGE_KEY])
 
     return raw_msg
