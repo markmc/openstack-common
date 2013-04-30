@@ -19,6 +19,7 @@
 import setuptools
 
 from openstack.common import setup
+from openstack.common.messaging import drivers
 
 requires = setup.parse_requirements()
 depend_links = setup.parse_dependency_links()
@@ -65,6 +66,7 @@ setuptools.setup(
     install_requires=requires,
     dependency_links=depend_links,
     entry_points={
+        drivers.NAMESPACE: drivers.TRANSPORT_DRIVERS,
         "openstack.common.scheduler.filters": filters,
         "openstack.common.tests.fakes.weights": weights,
         "console_scripts": [
