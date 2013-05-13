@@ -24,7 +24,7 @@ class Server(messaging.BlockingRPCServer):
                                   version='2.5')
         super(Server, self).__init__(transport, target, [self])
 
-    def test(self, arg):
+    def test(self, ctxt, arg):
         self.stop()
         return arg
 
@@ -45,13 +45,13 @@ class Client(messaging.RPCClient):
         target = messaging.Target(topic='testtopic', version='2.0')
         super(Client, self).__init__(transport, target)
 
-    def test(self, arg):
+    def test(self, ctxt, arg):
         cctxt = self.prepare(version='2.5')
-        return cctxt.call('test', arg=arg)
+        return cctxt.call(ctxt, 'test', arg=arg)
 
 
 client = Client(transport)
-print client.test('foo')
+print client.test({'c': 'b'}, 'foo')
 
 while thread.isAlive():
     thread.join(.05)
