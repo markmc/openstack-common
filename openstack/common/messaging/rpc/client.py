@@ -21,7 +21,9 @@ import inspect
 from oslo.config import cfg
 
 from openstack.common import log as logging
+from openstack.common.messaging import exceptions
 from openstack.common.messaging import target
+from openstack.common.messaging import _utils as utils
 
 _client_opts = [
     cfg.IntOpt('rpc_response_timeout',
@@ -32,15 +34,28 @@ _client_opts = [
 _LOG = logging.getLogger(__name__)
 
 
+class RPCVersionCapError(exceptions.MessagingException):
+
+    def __init__(self, version, version_cap):
+        self.version = version
+        self.version_cap = version_cap
+        msg = ("Specified RPC version cap, %(version_cap)s, is too low. "
+               "Needs to be higher than %(version)s." %
+               dict(version=self.version, version_cap=self.version_cap))
+        super(RPCVersionCapError, self).__init__(msg)
+
+
 class _CallContext(object):
 
-    def __init__(self, transport, target, timeout=None, check_for_lock=None):
+    def __init__(self, transport, target,
+                 timeout=None, check_for_lock=None, version_cap=None):
         self.conf = transport.conf
 
         self.transport = transport
         self.target = target
         self.timeout = timeout
         self.check_for_lock = check_for_lock
+        self.version_cap = version_cap
 
         super(_CallContext, self).__init__()
 
@@ -52,9 +67,16 @@ class _CallContext(object):
             msg['version'] = self.target.version
         return msg
 
+    def _check_version_cap(self, version):
+        if not utils.version_is_compatible(self.version_cap, version):
+            raise RPCVersionCapError(version=version,
+                                     version_cap=self.version_cap)
+
     def cast(self, ctxt, method, **kwargs):
         """Invoke a method and return immediately. See RPCClient.cast()."""
         msg = self._make_message(method, kwargs)
+        if self.version_cap:
+            self._check_version_cap(msg.get('version'))
         self.transport._send(self.target, ctxt, msg)
 
     def _check_for_lock(self):
@@ -76,6 +98,8 @@ class _CallContext(object):
 
         if self.check_for_lock:
             self._check_for_lock()
+        if self.version_cap:
+            self._check_version_cap(msg.get('version'))
 
         return self.transport._send(self.target, ctxt, msg,
                                     wait_for_reply=True, timeout=timeout)
@@ -137,7 +161,8 @@ class RPCClient(object):
     class will usually help to make the code much more obvious.
     """
 
-    def __init__(self, transport, target, timeout=None, check_for_lock=None):
+    def __init__(self, transport, target,
+                 timeout=None, check_for_lock=None, version_cap=None):
         """Construct an RPC client.
 
         :param transport: a messaging transport handle
@@ -148,6 +173,8 @@ class RPCClient(object):
         :type timeout: int or float
         :param check_for_lock: a callable that given conf returns held locks
         :type check_for_lock: bool
+        :param version_cap: raise a RPCVersionCapError version exceeds this cap
+        :type version_cap: str
         """
         self.conf = transport.conf
         self.conf.register_opts(_client_opts)
@@ -156,6 +183,7 @@ class RPCClient(object):
         self.target = target
         self.timeout = timeout
         self.check_for_lock = check_for_lock
+        self.version_cap = version_cap
 
         super(RPCClient, self).__init__()
 
@@ -163,7 +191,7 @@ class RPCClient(object):
 
     def prepare(self, exchange=_marker, topic=_marker, namespace=_marker,
                 version=_marker, server=_marker, fanout=_marker,
-                timeout=_marker, check_for_lock=_marker):
+                timeout=_marker, check_for_lock=_marker, version_cap=_marker):
         """Prepare a method invocation context.
 
         Use this method to override client properties for an individual method
@@ -189,6 +217,8 @@ class RPCClient(object):
         :type timeout: int or float
         :param check_for_lock: a callable that given conf returns held locks
         :type check_for_lock: bool
+        :param version_cap: raise a RPCVersionCapError version exceeds this cap
+        :type version_cap: str
         """
         kwargs = dict(
             exchange=exchange,
@@ -205,8 +235,11 @@ class RPCClient(object):
             timeout = self.timeout
         if check_for_lock is self._marker:
             check_for_lock = self.check_for_lock
+        if version_cap is self._marker:
+            version_cap = self.version_cap
 
-        return _CallContext(self.transport, target, timeout, check_for_lock)
+        return _CallContext(self.transport, target,
+                            timeout, check_for_lock, version_cap)
 
     def cast(self, ctxt, method, **kwargs):
         """Invoke a method and return immediately.
