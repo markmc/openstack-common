@@ -20,11 +20,13 @@ Unit Tests for rpc.proxy
 
 import copy
 
+import six
+
 from openstack.common import context
 from openstack.common import lockutils
 from openstack.common import rpc
-from openstack.common.rpc import proxy
 from openstack.common.rpc import common as rpc_common
+from openstack.common.rpc import proxy
 from tests import utils
 
 
@@ -83,6 +85,12 @@ class RpcProxyTestCase(utils.BaseTestCase):
         new_msg['version'] = '1.1'
         _check_args(ctxt, topic, new_msg)
 
+        # override the version to be above a specified cap
+        rpc_proxy.version_cap = '1.0'
+        self.assertRaises(rpc_common.RpcVersionCapError,
+                          getattr(rpc_proxy, rpc_method), *args, version='1.1')
+        rpc_proxy.version_cap = None
+
         if has_timeout:
             # Set a timeout
             retval = getattr(rpc_proxy, rpc_method)(ctxt, msg, timeout=42)
@@ -102,7 +110,7 @@ class RpcProxyTestCase(utils.BaseTestCase):
                 self.assertEqual(
                     u'Timeout while waiting on RPC response - '
                     'topic: "fake_topic", RPC method: "fake_method" '
-                    'info: "The spider got you"', unicode(exc))
+                    'info: "The spider got you"', six.text_type(exc))
             _check_args(ctxt, topic, expected_msg, timeout=42)
             self.stubs.Set(rpc, rpc_method, _fake_rpc_method)
 
