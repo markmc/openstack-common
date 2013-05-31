@@ -88,12 +88,13 @@ The first parameter to method invocations is always the request context
 supplied by the client.
 
 Parameters to the method invocation are primitive types and so must be the
-return values from the methods.
+return values from the methods. By supplying a serializer object, a server can
+deserialize arguments from - serialize return values to - primitive types.
 """
 
 
 def get_rpc_server(transport, target, endpoints,
-                   executor='blocking'):
+                   executor='blocking', serializer=None):
     """Construct an RPC server.
 
     The executor parameter controls how incoming messages will be received and
@@ -108,7 +109,9 @@ def get_rpc_server(transport, target, endpoints,
     :type endpoints: list
     :param executor: name of a message executor - e.g. 'eventlet', 'blocking'
     :type executor: str
+    :param serializer: an optional entity serializer
+    :type serializer: Serializer
     """
-    dispatcher = rpc_dispatcher.RPCDispatcher(endpoints)
+    dispatcher = rpc_dispatcher.RPCDispatcher(endpoints, serializer)
     return msg_server.MessageHandlingServer(transport, target,
                                             dispatcher, executor)

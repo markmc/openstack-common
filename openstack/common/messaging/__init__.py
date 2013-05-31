@@ -17,6 +17,7 @@ from openstack.common.messaging import exceptions
 from openstack.common.messaging.rpc import client
 from openstack.common.messaging.rpc import dispatcher as rpc_dispatcher
 from openstack.common.messaging.rpc import server as rpc_server
+from openstack.common.messaging import serializer
 from openstack.common.messaging import server
 from openstack.common.messaging import target
 from openstack.common.messaging import transport
@@ -30,6 +31,7 @@ RPCClient = client.RPCClient
 MessageHandlingServer = server.MessageHandlingServer
 get_rpc_server = rpc_server.get_rpc_server
 RPCDispatcher = rpc_dispatcher.RPCDispatcher
+Serializer = serializer.Serializer
 
 
 #

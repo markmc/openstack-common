@@ -18,6 +18,7 @@
 
 from openstack.common import log as logging
 from openstack.common.messaging import _utils as utils
+from openstack.common.messaging import serializer as msg_serializer
 from openstack.common.messaging import server as msg_server
 from openstack.common.messaging import target
 
@@ -62,8 +63,9 @@ class RPCDispatcher(object):
     object are remotely invokable by clients.
     """
 
-    def __init__(self, endpoints):
+    def __init__(self, endpoints, serializer):
         self.endpoints = endpoints
+        self.serializer = serializer or msg_serializer.NoOpSerializer()
         self._default_target = target.Target()
 
     @staticmethod
@@ -74,6 +76,13 @@ class RPCDispatcher(object):
     def _is_compatible(target, version):
         endpoint_version = target.version or '1.0'
         return utils.version_is_compatible(endpoint_version, version)
+
+    def _dispatch(self, endpoint, method, ctxt, args):
+        new_args = dict()
+        for argname, arg in args.iteritems():
+            new_args[argname] = self.serializer.deserialize_entity(ctxt, arg)
+        result = getattr(endpoint, method)(ctxt, **new_args)
+        return self.serializer.serialize_entity(ctxt, result)
 
     def __call__(self, ctxt, message):
         """Dispatch an RPC message to the appropriate endpoint method.
@@ -100,7 +109,7 @@ class RPCDispatcher(object):
                 continue
 
             if hasattr(endpoint, method):
-                return getattr(endpoint, method)(ctxt, **args)
+                return self._dispatch(endpoint, method, ctxt, args)
 
             found_compatible = True
 
