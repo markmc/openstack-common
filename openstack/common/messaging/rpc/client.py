@@ -22,8 +22,8 @@ from oslo.config import cfg
 
 from openstack.common import local
 from openstack.common import log as logging
-from openstack.common.messaging import target
 from openstack.common.messaging import _utils as utils
+from openstack.common.messaging import serializer as msg_serializer
 
 _client_opts = [
     cfg.IntOpt('rpc_response_timeout',
@@ -48,29 +48,36 @@ class RpcVersionCapError(Exception):
 
 class _CallContext(object):
 
-    def __init__(self, transport, target,
+    def __init__(self, transport, target, serializer,
                  timeout=None, check_for_lock=None, version_cap=None):
         self.conf = transport.conf
 
         self.transport = transport
         self.target = target
+        self.serializer = serializer
         self.timeout = timeout
         self.check_for_lock = check_for_lock
         self.version_cap = version_cap
 
         super(_CallContext, self).__init__()
 
-    def _make_message(self, method, args):
-        msg = dict(method=method, args=args)
+    def _make_message(self, ctxt, method, args):
+        msg = dict(method=method)
+
+        msg['args'] = dict()
+        for argname, arg in args.iteritems():
+            msg['args'][argname] = self.serializer.serialize_entity(ctxt, arg)
+
         if self.target.namespace is not None:
             msg['namespace'] = self.target.namespace
         if self.target.version is not None:
             msg['version'] = self.target.version
+
         return msg
 
     def cast(self, ctxt, method, **kwargs):
         """Invoke a method and return immediately. See RPCClient.cast()."""
-        msg = self._make_message(method, kwargs)
+        msg = self._make_message(ctxt, method, kwargs)
         self.transport._send(self.target, ctxt, msg)
 
     def _check_for_lock(self):
@@ -92,7 +99,7 @@ class _CallContext(object):
 
     def call(self, ctxt, method, **kwargs):
         """Invoke a method and wait for a reply. See RPCClient.call()."""
-        msg = self._make_message(method, kwargs)
+        msg = self._make_message(ctxt, method, kwargs)
 
         timeout = self.timeout
         if self.timeout is None:
@@ -103,8 +110,9 @@ class _CallContext(object):
         if self.version_cap:
             self._check_version_cap(msg.get('version'))
 
-        return self.transport._send(self.target, ctxt, msg,
-                                    wait_for_reply=True, timeout=timeout)
+        result = self.transport._send(self.target, ctxt, msg,
+                                      wait_for_reply=True, timeout=timeout)
+        return self.serializer.deserialize_entity(ctxt, result)
 
 
 class RPCClient(object):
@@ -164,7 +172,8 @@ class RPCClient(object):
     """
 
     def __init__(self, transport, target,
-                 timeout=None, check_for_lock=None, version_cap=None):
+                 timeout=None, check_for_lock=None,
+                 version_cap=None, serializer=None):
         """Construct an RPC client.
 
         :param transport: a messaging transport handle
@@ -177,6 +186,8 @@ class RPCClient(object):
         :type check_for_lock: bool
         :param version_cap: raise a RpcVersionCapError version exceeds this cap
         :type version_cap: str
+        :param serializer: an optional entity serializer
+        :type serializer: Serializer
         """
         self.conf = transport.conf
         self.conf.register_opts(_client_opts)
@@ -186,6 +197,7 @@ class RPCClient(object):
         self.timeout = timeout
         self.check_for_lock = check_for_lock
         self.version_cap = version_cap
+        self.serializer = serializer or msg_serializer.NoOpSerializer()
 
         super(RPCClient, self).__init__()
 
@@ -241,12 +253,15 @@ class RPCClient(object):
             version_cap = self.version_cap
 
         return _CallContext(self.transport, target,
-                            timeout, check_for_lock, version_cap)
+                            self.serializer,
+                            timeout, check_for_lock,
+                            version_cap)
 
     def cast(self, ctxt, method, **kwargs):
         """Invoke a method and return immediately.
 
-        Method arguments must be primitive types.
+        Method arguments must either be primitive types or types supported by
+        the client's serializer (if any).
 
         :param ctxt: a request context dict
         :type ctxt: dict
@@ -260,7 +275,8 @@ class RPCClient(object):
     def call(self, ctxt, method, **kwargs):
         """Invoke a method and wait for a reply.
 
-        Method arguments must be primitive types.
+        Method arguments must either be primitive types or types supported by
+        the client's serializer (if any).
 
         :param ctxt: a request context dict
         :type ctxt: dict

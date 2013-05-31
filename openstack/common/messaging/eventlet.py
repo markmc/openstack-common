@@ -28,7 +28,7 @@ class EventletRPCServer(server._RPCServer):
     method waits for all message dispatch greenthreads to complete.
     """
 
-    def __init__(self, transport, target, endpoints):
+    def __init__(self, transport, target, endpoints, serializer=None):
         """Construct a new eventlet RPC server.
 
         :param transport: the messaging transport
@@ -37,9 +37,12 @@ class EventletRPCServer(server._RPCServer):
         :type target: Target
         :param endpoints: a list of endpoint objects
         :type endpoints: list
+        :param serializer: an optional entity serializer
+        :type serializer: Serializer
         """
         executor_cls = impl_eventlet.EventletExecutor
         super(EventletRPCServer, self).__init__(transport,
                                                 target,
                                                 endpoints,
+                                                serializer,
                                                 executor_cls)

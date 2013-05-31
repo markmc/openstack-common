@@ -16,6 +16,7 @@
 from openstack.common.messaging import exceptions
 from openstack.common.messaging.rpc import client
 from openstack.common.messaging.rpc import server
+from openstack.common.messaging import serializer
 from openstack.common.messaging import target
 from openstack.common.messaging import transport
 
@@ -25,6 +26,7 @@ Target = target.Target
 
 RPCClient = client.RPCClient
 BlockingRPCServer = server.BlockingRPCServer
+Serializer = serializer.Serializer
 
 MessagingException = exceptions.MessagingException
 MessagingTimeout = exceptions.MessagingTimeout
