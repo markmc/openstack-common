@@ -96,10 +96,11 @@ deserialize arguments from - serialize return values to - primitive types.
 
 class _RPCServer(_server.MessageHandlingServer):
 
-    def __init__(self, transport, target, endpoints, executor_cls):
+    def __init__(self, transport, target, endpoints, serializer, executor_cls):
+        dispatcher = _dispatcher.RPCDispatcher(endpoints, serializer)
         super(_RPCServer, self).__init__(transport,
                                          target,
-                                         _dispatcher.RPCDispatcher(endpoints),
+                                         dispatcher,
                                          executor_cls)
 
 
@@ -117,7 +118,7 @@ class BlockingRPCServer(_RPCServer):
     This class is likely to only be useful for simple demo programs.
     """
 
-    def __init__(self, transport, target, endpoints):
+    def __init__(self, transport, target, endpoints, serializer=None):
         """Construct a new blocking RPC server.
 
         :param transport: the messaging transport
@@ -126,9 +127,12 @@ class BlockingRPCServer(_RPCServer):
         :type target: Target
         :param endpoints: a list of endpoint objects
         :type endpoints: list
+        :param serializer: an optional entity serializer
+        :type serializer: Serializer
         """
         executor_cls = impl_blocking.BlockingExecutor
         super(BlockingRPCServer, self).__init__(transport,
                                                 target,
                                                 endpoints,
+                                                serializer,
                                                 executor_cls)
