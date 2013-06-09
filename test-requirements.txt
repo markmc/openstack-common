@@ -17,5 +17,6 @@ pyzmq==2.2.0.1
 redis
 setuptools-git>=0.4
 sphinx
+#testscenarios<0.5
 testtools>=0.9.22
 webtest
