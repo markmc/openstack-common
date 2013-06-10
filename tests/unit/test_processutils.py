@@ -19,8 +19,9 @@ from __future__ import print_function
 
 import fixtures
 import os
-import StringIO
 import tempfile
+
+from six import StringIO
 
 from openstack.common import processutils
 from tests import utils
@@ -113,7 +114,7 @@ echo $runs > "$1"
 exit 1
 ''')
             fp.close()
-            os.chmod(tmpfilename, 0755)
+            os.chmod(tmpfilename, 0o755)
             self.assertRaises(processutils.ProcessExecutionError,
                               processutils.execute,
                               tmpfilename, tmpfilename2, attempts=10,
@@ -158,7 +159,7 @@ echo foo > "$1"
 grep foo
 """)
             fp.close()
-            os.chmod(tmpfilename, 0755)
+            os.chmod(tmpfilename, 0o755)
             processutils.execute(tmpfilename,
                                  tmpfilename2,
                                  process_input='foo',
@@ -213,7 +214,7 @@ class FakeSshChannel(object):
         return self.rc
 
 
-class FakeSshStream(StringIO.StringIO):
+class FakeSshStream(StringIO):
     def setup_channel(self, rc):
         self.channel = FakeSshChannel(rc)
 
@@ -225,9 +226,9 @@ class FakeSshConnection(object):
     def exec_command(self, cmd):
         stdout = FakeSshStream('stdout')
         stdout.setup_channel(self.rc)
-        return (StringIO.StringIO(),
+        return (StringIO(),
                 stdout,
-                StringIO.StringIO('stderr'))
+                StringIO('stderr'))
 
 
 class SshExecuteTestCase(utils.BaseTestCase):

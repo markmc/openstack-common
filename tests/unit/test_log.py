@@ -1,11 +1,11 @@
 import cStringIO
 import logging
 import os
-import StringIO
 import sys
 import tempfile
 
 from oslo.config import cfg
+from six import StringIO
 
 from openstack.common import context
 from openstack.common import jsonutils
@@ -238,7 +238,7 @@ class ContextFormatterTestCase(test_utils.BaseTestCase):
 
 
 class ExceptionLoggingTestCase(test_utils.BaseTestCase):
-    """Test that Exceptions are logged"""
+    """Test that Exceptions are logged."""
 
     def test_excepthook_logs_exception(self):
         product_name = 'somename'
@@ -351,7 +351,7 @@ class SetDefaultsTestCase(test_utils.BaseTestCase):
 class LogConfigOptsTestCase(test_utils.BaseTestCase):
 
     def test_print_help(self):
-        f = StringIO.StringIO()
+        f = StringIO()
         CONF([])
         CONF.print_help(file=f)
         self.assertTrue('debug' in f.getvalue())
