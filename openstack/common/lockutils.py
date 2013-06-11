@@ -276,3 +276,17 @@ def synchronized_with_prefix(lock_file_prefix):
     """
 
     return functools.partial(synchronized, lock_file_prefix=lock_file_prefix)
+
+
+def check_for_lock(conf=None):
+    """Return a list of currently held @synchronized locks."""
+    store = local.strong_store
+    try:
+        return store.locks_held
+    except AttributeError:
+        return False
+
+
+def debug_check_for_lock(conf=CONF):
+    """Call check_for_lock() only when debugging is enabled."""
+    return check_for_lock() if CONF.debug else []
