@@ -1,6 +1,4 @@
-# vim: tabstop=4 shiftwidth=4 softtabstop=4
-
-# Copyright (c) 2013 Rackspace Hosting
+# Copyright 2013 Red Hat, Inc
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -15,15 +13,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-"""Middleware that attaches a correlation id to WSGI request"""
+import warnings
 
-from openstack.common.middleware import base
-from openstack.common import uuidutils
+msg = ("Modules in this package are deprecated "
+       "and will be removed in future releases")
 
-
-class CorrelationIdMiddleware(base.Middleware):
-
-    def process_request(self, req):
-        correlation_id = (req.headers.get("X_CORRELATION_ID") or
-                          uuidutils.generate_uuid())
-        req.headers['X_CORRELATION_ID'] = correlation_id
+warnings.warn(msg, DeprecationWarning)

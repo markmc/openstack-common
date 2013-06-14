@@ -22,8 +22,9 @@ from oslo.config import cfg
 import webob.dec
 import webob.exc
 
+from openstack.common.deprecated import wsgi
 from openstack.common.gettextutils import _
-from openstack.common import wsgi
+from openstack.common.middleware import base
 
 
 #default request size is 112k
@@ -40,7 +41,8 @@ CONF.register_opt(max_req_body_size)
 class LimitingReader(object):
     """Reader to limit the size of an incoming request."""
     def __init__(self, data, limit):
-        """
+        """Initiates LimitingReader object.
+
         :param data: Underlying data object
         :param limit: maximum number of bytes the reader should allow
         """
@@ -66,7 +68,7 @@ class LimitingReader(object):
         return result
 
 
-class RequestBodySizeLimiter(wsgi.Middleware):
+class RequestBodySizeLimiter(base.Middleware):
     """Limit the size of incoming requests."""
 
     def __init__(self, *args, **kwargs):

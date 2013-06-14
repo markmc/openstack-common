@@ -298,7 +298,7 @@ database_opts = [
                help='Minimum number of SQL connections to keep open in a '
                     'pool'),
     cfg.IntOpt('max_pool_size',
-               default=5,
+               default=None,
                deprecated_name='sql_max_pool_size',
                deprecated_group=DEFAULT,
                help='Maximum number of SQL connections to keep open in a '
@@ -330,6 +330,9 @@ database_opts = [
                 deprecated_name='sql_connection_trace',
                 deprecated_group=DEFAULT,
                 help='Add python stack traces to SQL as comment strings'),
+    cfg.IntOpt('pool_timeout',
+               default=None,
+               help='If set, use this value for pool_timeout with sqlalchemy'),
 ]
 
 CONF = cfg.CONF
@@ -343,12 +346,23 @@ _SLAVE_ENGINE = None
 _SLAVE_MAKER = None
 
 
-def set_defaults(sql_connection, sqlite_db):
+def set_defaults(sql_connection, sqlite_db, max_pool_size=None,
+                 max_overflow=None, pool_timeout=None):
     """Set defaults for configuration variables."""
     cfg.set_defaults(database_opts,
                      connection=sql_connection)
     cfg.set_defaults(sqlite_db_opts,
                      sqlite_db=sqlite_db)
+    # Update the QueuePool defaults
+    if max_pool_size is not None:
+        cfg.set_defaults(database_opts,
+                         max_pool_size=max_pool_size)
+    if max_overflow is not None:
+        cfg.set_defaults(database_opts,
+                         max_overflow=max_overflow)
+    if pool_timeout is not None:
+        cfg.set_defaults(database_opts,
+                         pool_timeout=pool_timeout)
 
 
 def cleanup():
@@ -370,8 +384,7 @@ def cleanup():
 
 
 class SqliteForeignKeysListener(PoolListener):
-    """
-    Ensures that the foreign key constraints are enforced in SQLite.
+    """Ensures that the foreign key constraints are enforced in SQLite.
 
     The foreign key constraints are disabled by default in SQLite,
     so the foreign key constraints will be enabled here for every
@@ -430,7 +443,8 @@ _DUP_KEY_RE_DB = {
 
 
 def _raise_if_duplicate_entry_error(integrity_error, engine_name):
-    """
+    """Raise exception if two entries are duplicated.
+
     In this function will be raised DBDuplicateEntry exception if integrity
     error wrap unique constraint violation.
     """
@@ -473,7 +487,8 @@ _DEADLOCK_RE_DB = {
 
 
 def _raise_if_deadlock_error(operational_error, engine_name):
-    """
+    """Raise exception on deadlock condition.
+
     Raise DBDeadlock exception if OperationalError contains a Deadlock
     condition.
     """
@@ -552,19 +567,17 @@ def _add_regexp_listener(dbapi_con, con_record):
 
 
 def _greenthread_yield(dbapi_con, con_record):
-    """
-    Ensure other greenthreads get a chance to execute by forcing a context
-    switch. With common database backends (eg MySQLdb and sqlite), there is
-    no implicit yield caused by network I/O since they are implemented by
-    C libraries that eventlet cannot monkey patch.
+    """Ensure other greenthreads get a chance to be executed.
+
+    Force a context switch. With common database backends (eg MySQLdb and
+    sqlite), there is no implicit yield caused by network I/O since they are
+    implemented by C libraries that eventlet cannot monkey patch.
     """
     greenthread.sleep(0)
 
 
 def _ping_listener(dbapi_conn, connection_rec, connection_proxy):
-    """
-    Ensures that MySQL connections checked out of the
-    pool are alive.
+    """Ensures that MySQL connections checked out of the pool are alive.
 
     Borrowed from:
     http://groups.google.com/group/sqlalchemy/msg/a4ce563d802c929f
@@ -620,9 +633,12 @@ def create_engine(sql_connection, sqlite_fk=False):
             engine_args["poolclass"] = StaticPool
             engine_args["connect_args"] = {'check_same_thread': False}
     else:
-        engine_args['pool_size'] = CONF.database.max_pool_size
+        if CONF.database.max_pool_size is not None:
+            engine_args['pool_size'] = CONF.database.max_pool_size
         if CONF.database.max_overflow is not None:
             engine_args['max_overflow'] = CONF.database.max_overflow
+        if CONF.database.pool_timeout is not None:
+            engine_args['pool_timeout'] = CONF.database.pool_timeout
 
     engine = sqlalchemy.create_engine(sql_connection, **engine_args)
 
@@ -699,8 +715,9 @@ def get_maker(engine, autocommit=True, expire_on_commit=False):
 
 
 def _patch_mysqldb_with_stacktrace_comments():
-    """Adds current stack trace as a comment in queries by patching
-    MySQLdb.cursors.BaseCursor._do_query.
+    """Adds current stack trace as a comment in queries.
+
+    Patches MySQLdb.cursors.BaseCursor._do_query.
     """
     import MySQLdb.cursors
     import traceback

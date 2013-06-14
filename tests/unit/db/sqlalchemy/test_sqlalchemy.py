@@ -70,6 +70,7 @@ retry_interval=40
 max_overflow=50
 connection_debug=60
 connection_trace=True
+pool_timeout=7
 """)])
         self.conf(['--config-file', paths[0]])
         self.assertEquals(self.conf.database.connection, 'x://y.z')
@@ -80,6 +81,7 @@ connection_trace=True
         self.assertEquals(self.conf.database.max_overflow, 50)
         self.assertEquals(self.conf.database.connection_debug, 60)
         self.assertEquals(self.conf.database.connection_trace, True)
+        self.assertEquals(self.conf.database.pool_timeout, 7)
 
 
 class SessionErrorWrapperTestCase(test_utils.BaseTestCase):
