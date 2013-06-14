@@ -15,7 +15,9 @@
 
 from openstack.common.messaging import exceptions
 from openstack.common.messaging.rpc import client
-from openstack.common.messaging.rpc import server
+from openstack.common.messaging.rpc import dispatcher as rpc_dispatcher
+from openstack.common.messaging.rpc import server as rpc_server
+from openstack.common.messaging import server
 from openstack.common.messaging import target
 from openstack.common.messaging import transport
 
@@ -24,9 +26,24 @@ get_transport = transport.get_transport
 Target = target.Target
 
 RPCClient = client.RPCClient
-BlockingRPCServer = server.BlockingRPCServer
 
+MessageHandlingServer = server.MessageHandlingServer
+get_rpc_server = rpc_server.get_rpc_server
+RPCDispatcher = rpc_dispatcher.RPCDispatcher
+
+
+#
+# Exceptions
+#
 MessagingException = exceptions.MessagingException
 MessagingTimeout = exceptions.MessagingTimeout
+
 DriverLoadFailure = transport.DriverLoadFailure
 InvalidTransportURL = transport.InvalidTransportURL
+
+MessagingServerError = server.MessagingServerError
+ExecutorLoadFailure = server.ExecutorLoadFailure
+
+RPCDispatcherError = rpc_dispatcher.RPCDispatcherError
+NoSuchMethod = rpc_dispatcher.NoSuchMethod
+UnsupportedVersion = rpc_dispatcher.UnsupportedVersion

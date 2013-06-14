@@ -13,9 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from openstack.common.messaging._executors import impl_blocking
-from openstack.common.messaging import _server
-from openstack.common.messaging.rpc import _dispatcher
+from openstack.common.messaging.rpc import dispatcher as rpc_dispatcher
+from openstack.common.messaging import server as msg_server
 
 """
 An RPC server exposes a number of endpoints, each of which contain a set of
@@ -74,7 +73,7 @@ A simple example of an RPC server with multiple endpoints might be:
         ServerControlEndpoint(self),
         TestEndpoint(),
     ]
-    server = messaging.BlockingRPCServer(transport, target, endpoints)
+    server = messaging.get_rpc_server(transport, target, endpoints)
     server.start()
     server.wait()
 
@@ -89,46 +88,27 @@ The first parameter to method invocations is always the request context
 supplied by the client.
 
 Parameters to the method invocation are primitive types and so must be the
-return values from the methods. By supplying a serializer object, a server can
-deserialize arguments from - serialize return values to - primitive types.
+return values from the methods.
 """
 
 
-class _RPCServer(_server.MessageHandlingServer):
+def get_rpc_server(transport, target, endpoints,
+                   executor='blocking'):
+    """Construct an RPC server.
 
-    def __init__(self, transport, target, endpoints, executor_cls):
-        super(_RPCServer, self).__init__(transport,
-                                         target,
-                                         _dispatcher.RPCDispatcher(endpoints),
-                                         executor_cls)
+    The executor parameter controls how incoming messages will be received and
+    dispatched. By default, the most simple executor is used - the blocking
+    executor.
 
-
-class BlockingRPCServer(_RPCServer):
-
-    """An RPC server which blocks and dispatches in the current thread.
-
-    The blocking RPC server is a very simple RPC server whose start() method
-    functions as a request processing loop - i.e. it blocks, processes messages
-    and only returns when stop() is called from a dispatched method.
-
-    Method calls are dispatched in the current thread, so only a single method
-    call can be executing at once.
-
-    This class is likely to only be useful for simple demo programs.
+    :param transport: the messaging transport
+    :type transport: Transport
+    :param target: the exchange, topic and server to listen on
+    :type target: Target
+    :param endpoints: a list of endpoint objects
+    :type endpoints: list
+    :param executor: name of a message executor - e.g. 'eventlet', 'blocking'
+    :type executor: str
     """
-
-    def __init__(self, transport, target, endpoints):
-        """Construct a new blocking RPC server.
-
-        :param transport: the messaging transport
-        :type transport: Transport
-        :param target: the exchange, topic and server to listen on
-        :type target: Target
-        :param endpoints: a list of endpoint objects
-        :type endpoints: list
-        """
-        executor_cls = impl_blocking.BlockingExecutor
-        super(BlockingRPCServer, self).__init__(transport,
-                                                target,
-                                                endpoints,
-                                                executor_cls)
+    dispatcher = rpc_dispatcher.RPCDispatcher(endpoints)
+    return msg_server.MessageHandlingServer(transport, target,
+                                            dispatcher, executor)
